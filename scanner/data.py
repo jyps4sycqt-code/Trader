@@ -17,7 +17,14 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+import requests
 import yfinance as yf
+
+_WIKI_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/123.0 Safari/537.36"
+)
 
 log = logging.getLogger(__name__)
 
@@ -59,7 +66,11 @@ def load_universe(source: str) -> list[str]:
 
 
 def _read_wiki_table(url: str, symbol_col: str) -> list[str]:
-    tables = pd.read_html(url)
+    # Wikipedia returns 403 to pandas' default urllib UA; fetch with a
+    # browser-like UA first, then hand the HTML body to pandas.
+    resp = requests.get(url, headers={"User-Agent": _WIKI_USER_AGENT}, timeout=30)
+    resp.raise_for_status()
+    tables = pd.read_html(resp.text)
     for tbl in tables:
         if symbol_col in tbl.columns:
             return tbl[symbol_col].astype(str).tolist()
