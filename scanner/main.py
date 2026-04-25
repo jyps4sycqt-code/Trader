@@ -59,11 +59,14 @@ def _scan(cfg: dict) -> tuple[list[screener.Candidate], object]:
     info = data_mod.fetch_info(list(history.keys()))
 
     candidates: list[screener.Candidate] = []
+    reject_counter: dict[str, int] = {}
     for t, df in history.items():
-        c = screener.build_candidate(t, df, info.get(t, {}), cfg)
+        c = screener.build_candidate(t, df, info.get(t, {}), cfg, reject_counter)
         if c is not None:
             candidates.append(c)
     logging.info("built %d raw candidates", len(candidates))
+    if reject_counter:
+        logging.info("rejection breakdown: %s", dict(sorted(reject_counter.items())))
 
     # News only on the (much smaller) shortlist that passes hard filters,
     # to keep yfinance.news calls bounded.

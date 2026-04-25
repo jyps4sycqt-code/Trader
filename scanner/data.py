@@ -141,14 +141,22 @@ def fetch_history(
 
 
 def fetch_info(tickers: Iterable[str]) -> dict[str, dict]:
+    tickers = list(tickers)
     out: dict[str, dict] = {}
+    populated = 0
     for t in tickers:
         try:
             info = yf.Ticker(t).get_info()
             if info:
                 out[t] = info
+                if info.get("marketCap"):
+                    populated += 1
         except Exception as exc:
             log.debug("info fetch failed %s: %s", t, exc)
+    log.info(
+        "info fetched: %d/%d returned data, %d with marketCap",
+        len(out), len(tickers), populated,
+    )
     return out
 
 

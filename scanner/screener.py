@@ -61,13 +61,20 @@ def build_candidate(
     history: pd.DataFrame,
     info: dict,
     cfg: dict,
+    reject_counter: dict[str, int] | None = None,
 ) -> Candidate | None:
+    def _rej(reason: str) -> None:
+        if reject_counter is not None:
+            reject_counter[reason] = reject_counter.get(reason, 0) + 1
+
     if "Close" not in history or len(history) < cfg["screener"]["min_history_days"]:
+        _rej("short_history")
         return None
 
     close = history["Close"].dropna()
     volume = history["Volume"].dropna()
     if close.empty or volume.empty:
+        _rej("no_close_or_volume")
         return None
 
     last = float(close.iloc[-1])
@@ -75,6 +82,7 @@ def build_candidate(
     sma200 = float(close.rolling(cfg["screener"]["sma_long"]).mean().iloc[-1])
     rsi = _rsi(close, cfg["screener"]["rsi_period"])
     if rsi is None or math.isnan(sma50) or math.isnan(sma200):
+        _rej("nan_indicators")
         return None
 
     pullback = (sma50 - last) / sma50 * 100.0
@@ -90,14 +98,17 @@ def build_candidate(
     eps_ttm = info.get("trailingEps")
     earnings_positive = bool(eps_ttm and eps_ttm > 0)
 
-    # Liquidity filter
     if avg_dollar_vol < cfg["universe"]["min_avg_dollar_volume"]:
+        _rej("liquidity")
         return None
     if mkt_cap < cfg["universe"]["min_market_cap_usd"]:
+        _rej("market_cap")
         return None
     if sector in cfg["universe"]["exclude_sectors"]:
+        _rej("excluded_sector")
         return None
     if ticker in cfg["universe"]["exclude_tickers"]:
+        _rej("excluded_ticker")
         return None
 
     return Candidate(
