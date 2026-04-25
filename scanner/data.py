@@ -87,9 +87,13 @@ def fetch_history(
     days: int,
     batch_size: int = 50,
 ) -> dict[str, pd.DataFrame]:
+    """`days` is *trading* days. We translate to calendar days with a 1.5×
+    factor (≈ 252 trading days per 365 calendar days, plus holiday buffer)
+    so a 220-trading-day request actually returns enough rows."""
     tickers = list(tickers)
     end = datetime.utcnow()
-    start = end - timedelta(days=days + 30)
+    calendar_days = int(days * 1.5) + 14
+    start = end - timedelta(days=calendar_days)
     out: dict[str, pd.DataFrame] = {}
     total_batches = (len(tickers) + batch_size - 1) // batch_size
 
