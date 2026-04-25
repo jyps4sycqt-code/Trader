@@ -1,0 +1,6 @@
+Account,Symbol,Action,Quantity,OrderType,LimitPrice,TimeInForce,Notes
+,CME,Buy,0.6876,MOO,,Day,Plan close $285.06; fallback LIMIT $286.49
+,CAH,Buy,0.9807,MOO,,Day,Plan close $199.85; fallback LIMIT $200.85
+,PCG,Buy,11.8001,MOO,,Day,Plan close $16.61; fallback LIMIT $16.69
+,GILD,Buy,1.5031,MOO,,Day,Plan close $130.40; fallback LIMIT $131.05
+,LHX,Buy,0.6173,MOO,,Day,Plan close $317.51; fallback LIMIT $319.10

@@ -1,6 +1,47 @@
 {
-  "as_of": "1970-01-01T00:00:00Z",
-  "week_index": 0,
-  "open": [],
+  "as_of": "2026-04-25T23:01:05Z",
+  "week_index": 1,
+  "open": [
+    {
+      "ticker": "CME",
+      "shares": 0.6876,
+      "entry_price": 285.05999755859375,
+      "entry_date": "2026-04-25",
+      "cost_basis": 196.01,
+      "rationale": "RSI 21.1, pullback +5.6% vs 50d, vol\u00d71.15, P/E 24.3"
+    },
+    {
+      "ticker": "CAH",
+      "shares": 0.9807,
+      "entry_price": 199.85000610351562,
+      "entry_date": "2026-04-25",
+      "cost_basis": 195.99,
+      "rationale": "RSI 30.8, pullback +7.2% vs 50d, vol\u00d71.00, P/E 28.8"
+    },
+    {
+      "ticker": "PCG",
+      "shares": 11.8001,
+      "entry_price": 16.610000610351562,
+      "entry_date": "2026-04-25",
+      "cost_basis": 196.0,
+      "rationale": "RSI 33.7, pullback +7.2% vs 50d, vol\u00d71.05, P/E 12.9"
+    },
+    {
+      "ticker": "GILD",
+      "shares": 1.5031,
+      "entry_price": 130.39999389648438,
+      "entry_date": "2026-04-25",
+      "cost_basis": 196.0,
+      "rationale": "RSI 26.5, pullback +8.4% vs 50d, vol\u00d70.93, P/E 19.2"
+    },
+    {
+      "ticker": "LHX",
+      "shares": 0.6173,
+      "entry_price": 317.510009765625,
+      "entry_date": "2026-04-25",
+      "cost_basis": 196.0,
+      "rationale": "RSI 19.1, pullback +10.3% vs 50d, vol\u00d71.34, P/E 37.2"
+    }
+  ],
   "history": []
 }
