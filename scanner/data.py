@@ -91,9 +91,12 @@ def fetch_history(
     end = datetime.utcnow()
     start = end - timedelta(days=days + 30)
     out: dict[str, pd.DataFrame] = {}
+    total_batches = (len(tickers) + batch_size - 1) // batch_size
 
     for i in range(0, len(tickers), batch_size):
         batch = tickers[i : i + batch_size]
+        batch_idx = i // batch_size + 1
+        log.info("history batch %d/%d: %s..%s", batch_idx, total_batches, batch[0], batch[-1])
         try:
             df = yf.download(
                 tickers=" ".join(batch),
@@ -108,17 +111,30 @@ def fetch_history(
             log.warning("batch download failed (%s..%s): %s", batch[0], batch[-1], exc)
             continue
 
-        for t in batch:
-            try:
-                sub = df[t] if (t,) in df.columns or t in df.columns.get_level_values(0) else None
-                if sub is None or sub.dropna().empty:
+        if df.empty:
+            continue
+
+        # Multi-ticker batches return a MultiIndex (ticker, field) — sort
+        # once so per-ticker .xs() lookups are O(1) instead of triggering
+        # "indexing past lexsort depth" warnings on every access.
+        if isinstance(df.columns, pd.MultiIndex):
+            df = df.sort_index(axis=1)
+            for t in batch:
+                try:
+                    sub = df.xs(t, axis=1, level=0, drop_level=True)
+                except KeyError:
+                    continue
+                if "Close" not in sub.columns:
                     continue
                 sub = sub.dropna(subset=["Close"]).copy()
                 if len(sub) < 60:
                     continue
                 out[t] = sub
-            except Exception:
-                continue
+        else:
+            # Single-ticker batch: yfinance returns a flat column index.
+            sub = df.dropna(subset=["Close"]).copy()
+            if len(sub) >= 60:
+                out[batch[0]] = sub
 
     log.info("history fetched for %d/%d tickers", len(out), len(tickers))
     return out
