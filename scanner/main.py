@@ -70,12 +70,14 @@ def _scan(cfg: dict) -> tuple[list[screener.Candidate], object]:
 
     # News only on the (much smaller) shortlist that passes hard filters,
     # to keep yfinance.news calls bounded.
-    pre_ranked = screener.rank(candidates, cfg, macro)
+    target_n = cfg["budget"]["num_positions"]
+    pre_ranked, _ = screener.rank(candidates, cfg, macro, target_n=target_n)
     shortlist = pre_ranked[:25]
     for c in shortlist:
         c.news = news_mod.read_news(c.ticker, cfg)
 
-    final = screener.rank(shortlist, cfg, macro)
+    final, tier = screener.rank(shortlist, cfg, macro, target_n=target_n)
+    logging.info("final ranking via tier=%s, %d survivors", tier, len(final))
     return final, macro
 
 

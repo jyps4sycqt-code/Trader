@@ -126,25 +126,40 @@ def build_candidate(
     )
 
 
-def _passes_hard_filters(c: Candidate, cfg: dict, regime: str) -> tuple[bool, str]:
-    rsi_max = cfg["screener"]["rsi_max"]
-    pullback_max = cfg["screener"]["pullback_pct_max"]
+def _passes_hard_filters(
+    c: Candidate,
+    cfg: dict,
+    regime: str,
+    overrides: dict | None = None,
+    reject_counter: dict[str, int] | None = None,
+) -> tuple[bool, str]:
+    s = dict(cfg["screener"])
+    if overrides:
+        s.update(overrides)
+
+    rsi_max = s["rsi_max"]
+    pullback_max = s["pullback_pct_max"]
     if regime == "defensive":
         rsi_max = min(rsi_max, cfg["macro"]["defensive_rsi_max"])
         pullback_max = min(pullback_max, cfg["macro"]["defensive_pullback_max"])
 
+    def _rej(reason: str) -> tuple[bool, str]:
+        if reject_counter is not None:
+            reject_counter[reason] = reject_counter.get(reason, 0) + 1
+        return False, reason
+
     if c.rsi > rsi_max:
-        return False, f"RSI {c.rsi:.1f} > {rsi_max}"
-    if c.pullback_pct < cfg["screener"]["pullback_pct_min"]:
-        return False, f"pullback {c.pullback_pct:.1f}% < min"
+        return _rej(f"rsi>{rsi_max:g}")
+    if c.pullback_pct < s["pullback_pct_min"]:
+        return _rej("pullback<min")
     if c.pullback_pct > pullback_max:
-        return False, f"pullback {c.pullback_pct:.1f}% > max"
-    if cfg["screener"]["require_above_sma_long"] and c.close < c.sma200:
-        return False, "below 200-day SMA"
-    if c.vol_ratio < cfg["screener"]["volume_spike_min"]:
-        return False, f"volume ratio {c.vol_ratio:.2f} < min"
+        return _rej(f"pullback>{pullback_max:g}")
+    if s["require_above_sma_long"] and c.close < c.sma200:
+        return _rej("below_sma200")
+    if c.vol_ratio < s["volume_spike_min"]:
+        return _rej(f"vol_ratio<{s['volume_spike_min']:g}")
     if not c.earnings_positive:
-        return False, "no positive trailing EPS"
+        return _rej("no_positive_eps")
     return True, ""
 
 
@@ -181,31 +196,70 @@ def _score(c: Candidate, cfg: dict) -> tuple[float, dict]:
     return float(score), components
 
 
+# Progressive fallback: try strict filters first, relax if we don't have
+# enough survivors. Earnings-positive and clean-news remain non-negotiable
+# at every tier — the user's rule is "open 5 every week," not "open 5
+# fraudulent companies."
+RELAXATION_TIERS = [
+    {"name": "strict", "overrides": {}},
+    {"name": "no_volume_spike", "overrides": {"volume_spike_min": 0.0}},
+    {"name": "rsi_45",          "overrides": {"volume_spike_min": 0.0, "rsi_max": 45}},
+    {"name": "wider_pullback",  "overrides": {"volume_spike_min": 0.0, "rsi_max": 50, "pullback_pct_max": 18}},
+    {"name": "any_trend",       "overrides": {"volume_spike_min": 0.0, "rsi_max": 55, "pullback_pct_max": 20, "require_above_sma_long": False}},
+]
+
+
+def _attach_score(c: Candidate, cfg: dict) -> None:
+    c.score, c.score_components = _score(c, cfg)
+    if c.pe_ratio:
+        c.rationale = (
+            f"RSI {c.rsi:.1f}, pullback {c.pullback_pct:+.1f}% vs 50d, "
+            f"vol×{c.vol_ratio:.2f}, P/E {c.pe_ratio:.1f}"
+        )
+    else:
+        c.rationale = (
+            f"RSI {c.rsi:.1f}, pullback {c.pullback_pct:+.1f}% vs 50d, "
+            f"vol×{c.vol_ratio:.2f}"
+        )
+
+
 def rank(
     candidates: list[Candidate],
     cfg: dict,
     macro: MacroSnapshot,
-) -> list[Candidate]:
-    survivors: list[Candidate] = []
-    for c in candidates:
-        ok, reason = _passes_hard_filters(c, cfg, macro.regime)
-        if not ok:
-            log.debug("drop %s: %s", c.ticker, reason)
-            continue
-        if c.news and c.news.has_hard_negative:
-            log.info("drop %s: hard-negative news %s", c.ticker, c.news.matched_negative)
-            continue
-        c.score, c.score_components = _score(c, cfg)
-        c.rationale = (
-            f"RSI {c.rsi:.1f}, pullback {c.pullback_pct:+.1f}% vs 50d, "
-            f"vol×{c.vol_ratio:.2f}, P/E "
-            f"{c.pe_ratio:.1f}" if c.pe_ratio else
-            f"RSI {c.rsi:.1f}, pullback {c.pullback_pct:+.1f}% vs 50d, vol×{c.vol_ratio:.2f}"
-        )
-        survivors.append(c)
+    target_n: int = 5,
+) -> tuple[list[Candidate], str]:
+    """Returns (ranked_survivors, tier_used). Walks the relaxation tiers
+    until at least target_n candidates survive (or until all tiers are
+    exhausted, in which case we return whatever the most permissive tier
+    produced).
+    """
+    # Always-on news kill: drop anything with hard-negative headlines.
+    clean = [c for c in candidates if not (c.news and c.news.has_hard_negative)]
 
-    survivors.sort(key=lambda x: x.score, reverse=True)
-    return survivors
+    last_survivors: list[Candidate] = []
+    last_tier = "strict"
+    for tier in RELAXATION_TIERS:
+        rej: dict[str, int] = {}
+        survivors: list[Candidate] = []
+        for c in clean:
+            ok, _ = _passes_hard_filters(
+                c, cfg, macro.regime, overrides=tier["overrides"], reject_counter=rej
+            )
+            if ok:
+                survivors.append(c)
+        log.info(
+            "rank tier=%s survivors=%d rejects=%s",
+            tier["name"], len(survivors), dict(sorted(rej.items())),
+        )
+        last_survivors, last_tier = survivors, tier["name"]
+        if len(survivors) >= target_n:
+            break
+
+    for c in last_survivors:
+        _attach_score(c, cfg)
+    last_survivors.sort(key=lambda x: x.score, reverse=True)
+    return last_survivors, last_tier
 
 
 def diversify(picks: list[Candidate], n: int) -> list[Candidate]:
