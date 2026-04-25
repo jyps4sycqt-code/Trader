@@ -38,6 +38,10 @@ def _setup_logging(verbose: bool) -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         stream=sys.stdout,
     )
+    # Third-party libraries are extremely chatty at DEBUG; mute them so
+    # `-v` shows our scanner's debug output without drowning in HTTP traces.
+    for noisy in ("yfinance", "peewee", "urllib3", "requests", "asyncio"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def _today_iso() -> str:
