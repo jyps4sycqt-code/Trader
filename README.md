@@ -72,12 +72,15 @@ login.
 
 Each Sunday run drops `reports/YYYY-MM-DD/`:
 
-- `trade_ticket.csv` — Fidelity Active Trader Pro **basket import**
-  format (Trade > Baskets > Import).
-- `trade_ticket.md` — manual-entry table for entering each trade by hand
-  if you don't have basket access. The "Plan Px" is Friday's close; if
-  Market-on-Open isn't offered, fall back to a LIMIT at the listed price
-  (Friday close + 0.5%).
+- `trade_ticket.md` — primary artifact. Has a copy/paste watchlist line
+  (paste into Fidelity.com > News & Research > Watch List > Add Symbols,
+  or ATP > Watch List > Import — free), then a per-position table with
+  shares, planned price, and limit fallback for manual entry. The "Plan
+  Px" is Friday's close; if Market-on-Open isn't offered, fall back to
+  LIMIT at the listed price (Friday close + 0.5%).
+- `trade_ticket.csv` — same data in Fidelity Active Trader Pro basket
+  format. Only useful if you subscribe to Basket Trader ($5/mo).
+  Otherwise ignore it.
 - `scan_report.md` — rationale per pick, runners-up, macro context.
 
 The scanner uses **fractional shares** to evenly split the budget. If you
