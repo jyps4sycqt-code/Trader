@@ -260,10 +260,67 @@ def _write_scan_report(
     path.write_text("\n".join(lines))
 
 
+def cmd_close_week(cfg: dict, fills: dict[str, float] | None = None) -> int:
+    """Manual end-of-week close. Run Friday after you sell in Fidelity.
+
+    With no --fills argument, exit prices come from the most recent
+    available quote (yfinance, ≈ Friday's close). If you pass --fills
+    we'll use your actual fill prices for the history record.
+    """
+    state = portfolio.load_state(REPO_ROOT / cfg["execution"]["state_file"])
+    if not state.open:
+        logging.info("no open positions to close")
+        return 0
+
+    today = _today_iso()
+    quotes: dict[str, float] = {}
+    for pos in state.open:
+        if fills and pos.ticker in fills:
+            quotes[pos.ticker] = fills[pos.ticker]
+        else:
+            q = data_mod.fetch_quote(pos.ticker)
+            quotes[pos.ticker] = q if q is not None else pos.entry_price
+
+    record = portfolio.close_all_positions(state, quotes, today)
+    portfolio.save_state(state, REPO_ROOT / cfg["execution"]["state_file"])
+
+    logging.info(
+        "closed %d positions; realized P&L $%+.2f",
+        len(record["positions"]), record["total_pnl_usd"],
+    )
+    for r in record["positions"]:
+        logging.info(
+            "  %s  shares=%.4f  entry=$%.2f  exit=$%.2f  P&L $%+.2f (%+.2f%%)",
+            r["ticker"], r["shares"], r["entry_price"], r["exit_price"],
+            r["pnl_usd"], r["pnl_pct"],
+        )
+
+    commit_and_push(REPO_ROOT, cfg, f"close-week: manual close {today}")
+    return 0
+
+
+def _parse_fills(arg: str | None) -> dict[str, float] | None:
+    """Parse --fills 'CME=287.10,CAH=201.50,...' into a dict."""
+    if not arg:
+        return None
+    out: dict[str, float] = {}
+    for part in arg.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        ticker, _, price = part.partition("=")
+        out[ticker.strip().upper()] = float(price.strip())
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["weekly", "daily", "scan"])
+    parser.add_argument("command", choices=["weekly", "daily", "scan", "close-week"])
     parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument(
+        "--fills",
+        help="Optional fill prices for close-week, e.g. 'CME=287.10,CAH=201.50'",
+    )
     args = parser.parse_args(argv)
     _setup_logging(args.verbose)
     cfg = _load_cfg()
@@ -271,6 +328,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_weekly(cfg)
     if args.command == "daily":
         return cmd_daily(cfg)
+    if args.command == "close-week":
+        return cmd_close_week(cfg, _parse_fills(args.fills))
     return cmd_scan(cfg)
 
 

@@ -16,6 +16,18 @@ on the same Sunday run.
 |---|---|---|
 | Sun 18:00 (pre-market Mon) | `weekly` | trade_ticket.csv + trade_ticket.md + scan_report.md, push to GitHub |
 | Mon–Fri 17:00 | `daily` | monitor.md (P&L of open basket), push to GitHub |
+| Fri after manual sell | `close-week` (manual) | mutates state to mark basket closed, pushes to GitHub |
+
+## Workflow
+
+1. **Friday during market hours** — manually sell the 5 positions in Fidelity.
+2. **Friday after the sell** — run `python -m scanner.main close-week` on the
+   Mac mini. Exit prices default to the latest available quote (≈ Friday close);
+   pass `--fills 'CME=287.10,CAH=201.50,...'` if you want fill-accurate history.
+3. **Sunday 18:00** — the weekly launchd job runs automatically. Because state
+   shows an empty `open[]`, it produces a **buy-only** ticket for Monday.
+4. **Monday at the open** — place the buys via Fidelity basket import or
+   manual entry from `trade_ticket.md`.
 
 ## Setup on the Mac mini
 
